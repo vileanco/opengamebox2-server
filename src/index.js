@@ -95,7 +95,9 @@ io.on('connection', socket => {
     .filter(x => x.selectedClientId === null)
     .forEach(entity => {
       entity.selectedClientId = player.id;
-      entity.depth = ++nextEntityDepth;
+      if (!entity.frozen) {
+        entity.depth = ++nextEntityDepth;
+      }
       updateList[entity.id] = _.pick(entity, ['id', 'selectedClientId', 'depth']);
     });
 
@@ -109,7 +111,7 @@ io.on('connection', socket => {
     const moveList = [];
     entityArr.forEach(entity => {
       let ent = entities[entity.id];
-      if (ent.selectedClientId === player.id) {
+      if (ent.selectedClientId === player.id && !ent.frozen) {
         ent.pos = entity.pos;
         ent.depth = ++nextEntityDepth;
         moveList.push({
@@ -123,6 +125,28 @@ io.on('connection', socket => {
     if (moveList.length !== 0) {
       io.to('game').emit(protocol.events.ENTITY_MOVE, moveList);
     }
+  });
+
+  const handleEntityFreeze = (entityArr, player, frozen) => {
+    const updateList = entityArr
+      .filter(entityId => entities[entityId].selectedClientId === player.id);
+
+    updateList.forEach(entityId => {
+      entities[entityId].frozen = frozen;
+    });
+
+    if (updateList.length !== 0) {
+      const eventType = frozen ? protocol.events.ENTITY_FREEZE : protocol.events.ENTITY_UNFREEZE;
+      io.to('game').emit(eventType, updateList);
+    }
+  };
+
+  onRequest(socket, protocol.requests.ENTITY_FREEZE_REQUEST, (entityArr, player) => {
+    handleEntityFreeze(entityArr, player, true);
+  });
+
+  onRequest(socket, protocol.requests.ENTITY_UNFREEZE_REQUEST, (entityArr, player) => {
+    handleEntityFreeze(entityArr, player, false);
   });
 
   onRequest(socket, protocol.requests.PLAYER_UPDATE_REQUEST, (update, player) => {
